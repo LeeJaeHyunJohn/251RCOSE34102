@@ -32,3 +32,13 @@ QUEUE* Create_Queue(void) {
 	buf->cnt = 0;
 	return buf;
 }
+
+void Enqueue(QUEUE* queue, int name) {
+	*(queue->ID + (queue->cnt)) = name;
+	queue->cnt++;
+}
+
+void Dequeue(QUEUE* queue) {
+	queue->cnt--;
+	memmove(queue->ID, queue->ID + 1, sizeof(int) * (queue->cnt));
+}
