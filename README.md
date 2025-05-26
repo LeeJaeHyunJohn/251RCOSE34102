@@ -38,6 +38,18 @@ o 결론
 
 소스코드는 보고서 마지막에 <부록>으로 첨부
 
-
 <img width="466" alt="Monosnap CPU Scheduling Simulator pdf 2025-05-26 17-45-04" src="https://github.com/user-attachments/assets/72707a98-fe3c-4ca3-b699-8cc7bf832bc8" />
+
+
+💡 본 프로젝트는 우분투 환경에서도 원활하게 실행되며, 아래와 같이 결과가 출력됩니다.
+각 스케줄링 알고리즘 별로 Gantt Chart, 평균 대기 시간(AWT), 평균 반환 시간(ATT), CPU 활용률 등의 지표가 자동 계산되어 출력됩니다.
+아래는 실제 실행 결과 예시입니다. ⬇️
+
+![Monosnap OS-tutorial 2025-05-27 02-44-09](https://github.com/user-attachments/assets/ad252f11-4f07-4566-9133-820babb08e0f)
+
+![Monosnap OS-tutorial 2025-05-27 02-44-35](https://github.com/user-attachments/assets/b6e34a1f-1cbf-4cc1-9e9f-bdb2fd3153c5)
+
+![Monosnap OS-tutorial 2025-05-27 02-44-48](https://github.com/user-attachments/assets/c1422af6-a81c-486a-a2ad-d65139c5c976)
+
+![Monosnap OS-tutorial 2025-05-27 02-44-59](https://github.com/user-attachments/assets/21e743c0-ae79-4fc8-b339-88e6c63f463b)
 
