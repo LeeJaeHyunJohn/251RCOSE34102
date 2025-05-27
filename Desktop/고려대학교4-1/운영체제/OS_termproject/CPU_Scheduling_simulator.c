@@ -12,11 +12,13 @@
 // - Average_*, CPU_Utilization: 스케줄링 결과 기록용
 // - left_IO: 알고리즘별 I/O 대기 시간 보정용
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// 랭킹 저장용 배열
 int Rank_Waiting_Time[6] = { 0, 1, 2, 3, 4, 5 };
 int Rank_Turnaround_Time[6] = { 0, 1, 2, 3, 4, 5 };
 int Rank_CPU_Utilization[6] = { 0, 1, 2, 3, 4, 5 };
+// 각 알고리즘별 평균 지표(대기 시간, 반환 시간, CPU 사용률)를 저장하는 배열
 float Average_Waiting_Time[6], Average_Turnaround_Time[6], CPU_Utilization[6];
+//I/O 대기 시간 보정용 배열(I/O 작업 시간만큼 실제로 CPU 대기 시간에서 제외하기 위해..)
 int left_IO[6][5];//6개 알고리즘 * 5개 프로세스
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -31,13 +33,13 @@ typedef struct {
 	int IO_Burst_Time;
 	int Arrival_Time;
 	int Priority;
-	int IO_Burst_Timing;
+	int IO_Burst_Timing;//언제 I/O 요청할지 시점
 } Process;
 
 //QUEUE 구조체 정의
 typedef struct {
-	int* ID;
-	int cnt;
+	int* ID;//프로세스 번호 담는 동적 배열 주소
+	int cnt;//큐에 현재 들어있는 프로세스 수
 } QUEUE;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +90,9 @@ Process Create_Process(int ID) {
 	buf.IO_Burst_Time = rand() % 5 + 1;
 	buf.Arrival_Time = rand() % 20 + 1;
 	buf.Priority = rand() % 10 + 1;
-	buf.IO_Burst_Timing = rand() % buf.CPU_Burst_Time;//CPU 작업 중 언제쯤 I/O가 발생할지
+	//0 이상 CPU_Burst_Time - 1 이하로 제한
+	//I/O 요청이 발생할 CPU 시간 시점을 랜덤으로 정하자
+	buf.IO_Burst_Timing = rand() % buf.CPU_Burst_Time;
 
 	return buf;
 }
@@ -105,7 +109,8 @@ Process Copy_Process(Process process) {//원본 프로세스 복사
 
 	return buf;
 }
-
+//프로세스 정보들 화면 출력 함수
+//process_Info는 main()함수에서 생성한 배열을 전달받음
 void Print_Process(Process process_Info[], int Process_Cnt) {
 
 	for (int i = 0; i < Process_Cnt; i++) {
@@ -153,25 +158,27 @@ void Print_Gantt_Chart(int** CPU_Info, int flag) {//flag : 간트차트에 몇 �
 // - Keep_Value[1][i]: 마지막으로 CPU 사용한 시각
 // - I/O 보정 포함
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 float Calculate_Average_Waiting_Time(Process Process_Info[], int Process_Cnt, int** CPU_Info, int flag, int left_IO_flag) {
 //프로세스 정보 배열,프로세스 개수,간트 차트 정보,간트 차트 구간 수,left_IO 사용 시 인덱스 용	
+	
+	//Keep_Value배열에 누적 대기 시간, 마지막 CPU 종료 시각 저장
 	int** Keep_Value = (int**)malloc(sizeof(int*) * 2);//계산 중간 값 저장용 배열
 	int Total = 0; //모든 프로세스 대기 시간 총합
 	int Future_Time = 0; //현재 구간의 종료 시각
 	int Currunt_Time = 0; //현재 구간의 시작 시각
-//2행짜리 배열 초기화
+  //2행짜리 2차원 배열 동적 할당 (프로세스 수만큼 열 생성)
 	for (int i = 0; i < 2; i++) 
 			Keep_Value[i] = (int*)malloc(sizeof(int) * Process_Cnt);
-
+	//모든 프로세스의 누적 대기 시간 및 마지막 종료 시각을 0으로 초기화
 	for (int i = 0; i < Process_Cnt; i++) {
-		Keep_Value[0][i] = 0;//i번째 프로세스의 누적 대기 시간 0으로 초기화
-		Keep_Value[1][i] = 0;//i번째 프로세스가 마지막으로 CPU에서 빠진 시각 저장
+		Keep_Value[0][i] = 0;
+		Keep_Value[1][i] = 0;
 	}
-	for (int i = 0; i < flag; i++) {//간트 차트의 각 구간 훑기
+
+	//간트차트를 훑으며 대기 시간 계산
+	for (int i = 0; i < flag; i++) {
 		if (i == 0) Currunt_Time = 0;//i=0일 때는 당연히 시작 시간=0
 		else Currunt_Time = CPU_Info[0][i - 1];//그 외의 경우는 이전 구간의 종료 시각=현재 구간의 시작 시각
-
 		Future_Time = CPU_Info[0][i];
 		if (CPU_Info[1][i] != -1) {//이 구간에 CPU 사용 프로세스가 있다면?(IDLE은 건너뛰자)
 				int pid = CPU_Info[1][i]-1;//배열 인덱스랑 pid 맞추기 위해 -1			
@@ -188,10 +195,13 @@ float Calculate_Average_Waiting_Time(Process Process_Info[], int Process_Cnt, in
 				}
 		}
 	}
+
 	//average waiting time을 출력하는 파트
+	//대기 시간 보정(I/O 작업을 하러 갔기에 CPU를 기다린 게 아님)
 	for (int i = 0; i < Process_Cnt; i++) {
 		if(Process_Info[i].IO_Burst_Timing > 0) Keep_Value[0][i] -= (Process_Info[i].IO_Burst_Time + left_IO[left_IO_flag][i]);
-	}//대기 시간 보정(I/O 작업을 하러 갔기에 CPU를 기다린 게 아님)
+	}
+	//출력 및 평균 계산
 	printf("Average Waiting Time :\n");
 	printf("( ");
 	for (int i = 0; i < Process_Cnt; i++) {
@@ -210,14 +220,15 @@ float Calculate_Average_Waiting_Time(Process Process_Info[], int Process_Cnt, in
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //<정리용>
 // 평균 반환 시간 계산 함수
-// - 종료 시각 - 도착 시각 = 반환 시간
+// 마지막 종료 시각 - 도착 시각 = 반환 시간
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float Calculate_Average_Turnaround_Time(Process Process_Info[], int Process_Cnt, int** CPU_Info, int flag) {
-	//각 프로세스의 Turnaround Time 저장할 배열 생성
+	//각 프로세스의 Turnaround Time 저장할 배열 생성(i번째 프로세스의 반환 시간 저장)
 	int* Keep_Value = (int*)malloc(sizeof(int) * Process_Cnt);
 	int Total = 0;
 	//배열 초기화하기
-	for (int i = 0; i < Process_Cnt; i++) Keep_Value[i] = 0;
+	for (int i = 0; i < Process_Cnt; i++) 
+			Keep_Value[i] = 0;
 	//Gantt 차트 돌면서 마지막으로 실행된 시점 저장
 	for (int i = 0; i < flag; i++) 
 			if (CPU_Info[1][i] != -1) 
@@ -225,8 +236,6 @@ float Calculate_Average_Turnaround_Time(Process Process_Info[], int Process_Cnt,
 	//종료 시간 - 도착 시간 = 반환시간
 	for (int i = 0; i < Process_Cnt; i++) 
 			Keep_Value[i] -= Process_Info[i].Arrival_Time;
-
-	//for (int i = 0; i < Process_Cnt; i++) Keep_Value[i] -= Process_Info[i].IO_Burst_Time;
 
 	//출력 파트
 	printf("Average Turnaround Time :\n");
@@ -247,10 +256,11 @@ float Calculate_Average_Turnaround_Time(Process Process_Info[], int Process_Cnt,
 // - 전체 시간 중 IDLE 시간을 제외한 비율 계산
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 float Calculate_CPU_Utilization(int** CPU_Info, int flag) {//flag=간트차트 칸수..
-	int CPU_Idle = 0;
+	int CPU_Idle = 0;//IDLE 상태였던 시간 총합
 	int Last_Time = CPU_Info[0][flag - 1];//간트차트 마지막 시각
-	//if
 	//CPU_Info[0] = [3, 6, 9, 13]→ Last_Time = 13
+	
+	//간트차트 순회하며 IDLE 시간 누적
 	for (int i = 0; i < flag; i++) {
 		if (CPU_Info[1][i] == -1) {//IDLE 상태일 경우
 			if (i == 0)//첫구간(시작 시각=0)이면 종료시간 자체가 IDLE 시간 
@@ -259,10 +269,11 @@ float Calculate_CPU_Utilization(int** CPU_Info, int flag) {//flag=간트차트 �
 				CPU_Idle += CPU_Info[0][i] - CPU_Info[0][i - 1];
 		}
 	}
-	//전체에서 논 시간 빼면 일한 시간ㅇㅇ
+	//IDLE 제외한 CPU 시간 계산
 	int CPU_Not_Idle = Last_Time - CPU_Idle;
-	float ans = (float)CPU_Not_Idle / Last_Time;
 
+	//CPU 활용률 계산 및 출력
+	float ans = (float)CPU_Not_Idle / Last_Time;
 	printf("CPU Utilization :\n");
 	printf("%d / %d = %.0f%%\n\n", CPU_Not_Idle, Last_Time, ans * 100);
 
@@ -310,7 +321,7 @@ void FCFS(Process Process_Info[], int Process_Cnt) {
 		process[i] = Copy_Process(Process_Info[i]);
 
 	int Process_End_Cnt = 0;//끝난 애들 개수 초기화
-	int flag = 0;//총 구간 수 초기화
+	int flag = 0;//간트차트 칸 수
 
 	//1-3 간트차트 기록용 CPU_Info 배열 준비
 	//간트 차트 저장하는 2차원 배열//[0][i]=끝나는 시각,[1][i]=프로세스 번호
@@ -663,7 +674,7 @@ void Priority(Process Process_Info[], int Process_Cnt) {
 	int Process_End_Cnt = 0;//끝난 애들 개수 초기화																																
 	int flag = 0;//총 구간 수 초기화
 
-	//1-3 간트 차트 기록용 CPU+Info 배열 준비
+	//1-3 간트 차트 기록용 CPU_Info 배열 준비
 	//간트 차트 저장하는 2차원 배열//[0][i]=끝나는 시각,[1][i]=프로세스 번호
 	int** CPU_Info = (int**)malloc(sizeof(int) * 2);
 	//CPU 실행기록 저장용 표 생성(행이 2개, 각 행마다 1000칸)
@@ -740,7 +751,8 @@ void Priority(Process Process_Info[], int Process_Cnt) {
         CPU_Info[1][flag] = Currunt_CPU_Process;
         flag++;
 
-        // 종료 시점이 I/O 요청 타이밍과 겹치면 I/O대기 큐로 보냄
+				// e) I/O 요청 시점 도달 시: I/O 큐로 이동
+        // e-1) 종료 시점이 I/O 요청 타이밍과 겹치면 I/O대기 큐로 보냄
         if (process[Currunt_CPU_Process - 1].CPU_Burst_Time == process[Currunt_CPU_Process - 1].IO_Burst_Timing) {
             left_IO[2][Currunt_CPU_Process - 1] = -CPU_Time;
             Enqueue(Waiting_Queue, Currunt_CPU_Process);
@@ -750,7 +762,7 @@ void Priority(Process Process_Info[], int Process_Cnt) {
         Process_End_Cnt++;
     }
 
-    // 아직 작업은 남았지만 I/O 요청 시점에 도달한 경우
+    // e-2) 아직 작업은 남았지만 I/O 요청 시점에 도달한 경우
     if (process[Currunt_CPU_Process - 1].CPU_Burst_Time == process[Currunt_CPU_Process - 1].IO_Burst_Timing) {
         //I/O 대기 큐에 넣고, I/O 대기 시작 시점을 -CPU_Time으로 저장
 				left_IO[2][Currunt_CPU_Process - 1] = -CPU_Time;
@@ -794,7 +806,7 @@ void Priority(Process Process_Info[], int Process_Cnt) {
 			Currunt_IO_Process = -1;//I/O 장치가 비우기
 		}
 
-		// c) I/O 장치가 비었고 대기 중인 프로세스가 있다면 할당
+		// c) I/O 장치가 비었고 대기 중인 프로세스가 있다면 할당(waiting queue에서 다음 I/O 프로세스 꺼내기)
 		if (Currunt_IO_Process == -1 && Waiting_Queue->cnt > 0) {
 			Currunt_IO_Process = Waiting_Queue->ID[0];//waiting queue에 있던애 I/O 장치에 올려주기
 			left_IO[2][Currunt_IO_Process - 1] += CPU_Time;//대기 시간 계산
@@ -883,7 +895,7 @@ void RR(Process Process_Info[], int Process_Cnt, int quantum) {
 	int Currunt_IO_Process = -1;
 	int CPU_Idle_Time = 0;
 	int CPU_Time = 0;//현재 시뮬레이션 초
-	int Quantum_Time = 0;
+	int Quantum_Time = 0;//RR에서만 사용
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// 2. 시뮬레이션 루프 시작
@@ -1004,7 +1016,7 @@ void P_SJF(Process Process_Info[], int Process_Cnt) {
 //   - 시뮬레이션용 변수 초기화
 
 // 2. while (모든 프로세스 종료 전까지 반복)
-//   2-1. 프로세스 도착 확인 및 Ready Queue 삽입
+//   2-1. 프로세스 도착 확인 및 Ready Queue 삽입+선점조건 검사
 //     a) 현재 시간에 도착한 프로세스를 Enqueue
 //     b) Ready Queue를 CPU Burst Time 기준으로 오름차순 정렬
 //     c) 현재 실행 중인 프로세스보다 짧은 Job이 있다면 선점 발생
@@ -1055,7 +1067,7 @@ void P_SJF(Process Process_Info[], int Process_Cnt) {
 	int CPU_Time = 0;//현재 시뮬레이션 초
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // 2. while (모든 프로세스 종료 전까지 반복)
-//   2-1. 프로세스 도착 확인 및 Ready Queue 삽입
+//   2-1. 프로세스 도착 확인 및 Ready Queue 삽입+선점조건 검사
 //     a) 현재 시간에 도착한 프로세스를 Enqueue
 //     b) Ready Queue를 CPU Burst Time 기준으로 오름차순 정렬
 //     c) 현재 실행 중인 프로세스보다 짧은 Job이 있다면 선점 발생
@@ -1157,6 +1169,9 @@ void P_SJF(Process Process_Info[], int Process_Cnt) {
 		}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// 2-4. I/O 처리
+//		 a) 현재 I/O 프로세스 1초 수행
+//     b) I/O 완료되면 Ready로 복귀 + Ready Queue 재정렬
+//     c) 필요 시 현재 CPU 프로세스를 Ready Queue 최단 작업으로 교체
 		//<흐름 도식>
 		//[IO 종료] → [CPU 작업 남음?] → [Ready Queue에 삽입] → [정렬] → [선점 조건 검사]
     //                                                           ↓ yes
@@ -1165,6 +1180,8 @@ void P_SJF(Process Process_Info[], int Process_Cnt) {
 		// a) I/O에서 어떤 프로세스 실행 중이라면 1초 감소
 		if (Currunt_IO_Process != -1)
 			process[Currunt_IO_Process - 1].IO_Burst_Time--;
+
+		//b) I/O 완료되면 Ready로 복귀 + Ready Queue 재정렬	
 		//I/O 작업이 끝났는데 cpu 작업 남아 있다면 레디큐로 복귀
 		if (Currunt_IO_Process != -1 && process[Currunt_IO_Process - 1].IO_Burst_Time == 0) {
 			if (process[Currunt_IO_Process - 1].CPU_Burst_Time > 0) {
@@ -1181,6 +1198,7 @@ void P_SJF(Process Process_Info[], int Process_Cnt) {
 					}
 				}
 
+				//c) 필요 시 현재 CPU 프로세스를 Ready Queue 최단 작업으로 교체
 				// 선점 검사
 				//현재 실행 중인 프로세스가 있고 + 레디큐에 막 들어온 프로세스의 cpu 작업량이 더 짧다면?
 				if (Currunt_CPU_Process != -1 &&
@@ -1576,7 +1594,7 @@ int main(void) {
 	int Process_Cnt = 5;
 	int quantum = 4;
 
-	// 2. 랜덤 시드 설정
+	// 2. 랜덤 시드 설정(실행할 때마다 다른 랜덤값 생성하게)
 	srand(time(NULL));
 
 	// 3. 프로세스 정보 배열 선언 및 생성
